@@ -505,4 +505,9 @@ class nsqphp
         }
         $connection->write($this->writer->magic());
     }
+
+    public function addSchedule($interval, $callback)
+    {
+        $this->loop->addPeriodicTimer($interval, $callback);
+    }
 }
