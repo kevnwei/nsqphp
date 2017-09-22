@@ -26,7 +26,24 @@ class ConnectionPool implements \Iterator, \Countable
     {
         $this->connections[] = $connection;
     }
-    
+
+    /**
+     * remove connection from connection pool
+     *
+     * @param Resource|string $socketOrHost
+     *
+     */
+    public function remove($socketOrHost)
+    {
+        foreach ($this->connections as $idx => $conn) {
+            if (is_string($socketOrHost) && (string)$conn === $socketOrHost) {
+                unset($this->connections[$idx]);
+            } elseif ($conn->getSocket() === $socketOrHost) {
+                unset($this->connections[$idx]);
+            }
+        }
+    }
+
     /**
      * Test if has connection
      * 
