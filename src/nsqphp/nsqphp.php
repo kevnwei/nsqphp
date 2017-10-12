@@ -497,9 +497,6 @@ class nsqphp
             } else {
                 try {
                     call_user_func($callback, $msg);
-                    if ( !$this->running) {
-                        $rdy = 0;
-                    }
                 } catch (\Exception $e) {
                     // erase knowledge of this msg from dedupe
                     if ($this->dedupe !== NULL) {
@@ -516,6 +513,9 @@ class nsqphp
                         if ($this->logger) {
                             $this->logger->debug(sprintf('Requeuing [%s] "%s" with delay "%s"', (string)$connection, $msg->getId(), $delay));
                         }
+                        if ( !$this->running) {
+                            $rdy = 0;
+                        }
                         $connection->write($this->writer->ready($rdy));
                         $connection->write($this->writer->requeue($msg->getId(), $delay));
                         return;
@@ -528,6 +528,9 @@ class nsqphp
             }
 
             // mark as done; get next on the way
+            if ( !$this->running) {
+                $rdy = 0;
+            }
             $connection->write($this->writer->ready($rdy));
             $connection->write($this->writer->finish($msg->getId()));
 
