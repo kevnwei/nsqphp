@@ -42,4 +42,9 @@ interface ConnectionInterface
      * @return Resource The socket, after reconnecting
      */
     public function reconnect();
+
+    /**
+     * Close the socket resource.
+     */
+    public function close();
 }

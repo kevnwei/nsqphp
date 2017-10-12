@@ -23,6 +23,10 @@ class nsqphp
     const PUB_ONE = 1;
     const PUB_TWO = 2;
     const PUB_QUORUM = 5;
+    /**
+     * @var bool
+     */
+    private $running;
 
     /**
      * nsqlookupd service
@@ -187,6 +191,7 @@ class nsqphp
         $this->shortId = $parts[0];
         $this->longId = $hn;
         $this->lookupInterval = 60;
+        $this->running = true;
     }
 
     /**
@@ -205,8 +210,10 @@ class nsqphp
     public function __destruct()
     {
         // say goodbye to each connection
+        /** @var ConnectionInterface $connection */
         foreach ($this->subConnectionPool as $connection) {
             $connection->write($this->writer->close());
+            $connection->close();
             if ($this->logger) {
                 $this->logger->info(sprintf('nsqphp closing [%s]', (string)$connection));
             }
@@ -453,6 +460,7 @@ class nsqphp
      */
     public function stop()
     {
+        $this->running = false;
         $this->loop->stop();
     }
 
@@ -468,6 +476,7 @@ class nsqphp
     {
         $connection = $this->subConnectionPool->find($socket);
         $frame = $this->reader->readFrame($connection);
+        $rdy = 1;
 
         if ($this->logger) {
             $this->logger->debug(sprintf('Read frame for topic=%s channel=%s [%s] %s', $topic, $channel, (string)$connection, json_encode($frame)));
@@ -488,6 +497,9 @@ class nsqphp
             } else {
                 try {
                     call_user_func($callback, $msg);
+                    if ( !$this->running) {
+                        $rdy = 0;
+                    }
                 } catch (\Exception $e) {
                     // erase knowledge of this msg from dedupe
                     if ($this->dedupe !== NULL) {
@@ -504,8 +516,8 @@ class nsqphp
                         if ($this->logger) {
                             $this->logger->debug(sprintf('Requeuing [%s] "%s" with delay "%s"', (string)$connection, $msg->getId(), $delay));
                         }
+                        $connection->write($this->writer->ready($rdy));
                         $connection->write($this->writer->requeue($msg->getId(), $delay));
-                        $connection->write($this->writer->ready(1));
                         return;
                     } else {
                         if ($this->logger) {
@@ -516,8 +528,8 @@ class nsqphp
             }
 
             // mark as done; get next on the way
+            $connection->write($this->writer->ready($rdy));
             $connection->write($this->writer->finish($msg->getId()));
-            $connection->write($this->writer->ready(1));
 
         } elseif ($this->reader->frameIsOk($frame)) {
             if ($this->logger) {

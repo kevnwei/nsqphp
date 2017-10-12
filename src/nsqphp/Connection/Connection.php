@@ -233,6 +233,12 @@ class Connection implements ConnectionInterface
         }
         return $this->socket;
     }
+
+    public function close()
+    {
+        @fclose($this->socket);
+        $this->socket = NULL;
+    }
     
     /**
      * To string (for debug logging)
