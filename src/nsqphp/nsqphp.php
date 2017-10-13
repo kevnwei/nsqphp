@@ -553,7 +553,7 @@ class nsqphp
         if ( !$this->running) {
             $this->subConnectionPool->remove($socket);
             $this->loop->removeReadStream($socket);
-            $connection->write($this->writer->ready($rdy));
+            $connection->write($this->writer->ready(0));
             $connection->write($this->writer->close());
             $connection->close();
             if (empty($this->subConnectionPool->count())) {
