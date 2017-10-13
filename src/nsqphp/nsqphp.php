@@ -388,6 +388,9 @@ class nsqphp
 
     private function _connectNSQD($topic, $channel, $callback)
     {
+        if ( !$this->running) {
+            return null;
+        }
         $hosts = $this->nsLookup->lookupHosts($topic);
         if ($this->logger) {
             $this->logger->debug("Found the following hosts for topic \"$topic\": " . implode(',', $hosts));
@@ -461,7 +464,10 @@ class nsqphp
     public function stop()
     {
         $this->running = false;
-        $this->loop->stop();
+        if (empty($this->subConnectionPool->count())) {
+            $this->logger->warn('stop stop stop');
+            $this->loop->stop();
+        }
     }
 
     /**
@@ -518,7 +524,7 @@ class nsqphp
                         }
                         $connection->write($this->writer->ready($rdy));
                         $connection->write($this->writer->requeue($msg->getId(), $delay));
-                        return;
+                        goto END;
                     } else {
                         if ($this->logger) {
                             $this->logger->debug(sprintf('Not requeuing [%s] "%s"', (string)$connection, $msg->getId()));
@@ -534,6 +540,7 @@ class nsqphp
             $connection->write($this->writer->ready($rdy));
             $connection->write($this->writer->finish($msg->getId()));
 
+
         } elseif ($this->reader->frameIsOk($frame)) {
             if ($this->logger) {
                 $this->logger->debug(sprintf('Ignoring "OK" frame in SUB loop'));
@@ -541,6 +548,17 @@ class nsqphp
         } else {
             // @todo handle error responses a bit more cleverly
             throw new Exception\ProtocolException("Error/unexpected frame received: " . json_encode($frame));
+        }
+        END:
+        if ( !$this->running) {
+            $this->subConnectionPool->remove($socket);
+            $this->loop->removeReadStream($socket);
+            $connection->write($this->writer->ready($rdy));
+            $connection->write($this->writer->close());
+            $connection->close();
+            if (empty($this->subConnectionPool->count())) {
+                $this->loop->stop();
+            }
         }
     }
 
