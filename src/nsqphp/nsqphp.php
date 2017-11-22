@@ -14,6 +14,7 @@ use nsqphp\Dedupe\DedupeInterface;
 use nsqphp\RequeueStrategy\RequeueStrategyInterface;
 use nsqphp\Message\MessageInterface;
 use nsqphp\Message\Message;
+use mostka\Defer;
 
 class nsqphp
 {
@@ -148,6 +149,8 @@ class nsqphp
      */
     private $lookupInterval;
 
+    private $runningNum;
+
     /**
      * Constructor
      *
@@ -192,6 +195,7 @@ class nsqphp
         $this->longId = $hn;
         $this->lookupInterval = 60;
         $this->running = true;
+        $this->runningNum = 0;
     }
 
     /**
@@ -464,7 +468,7 @@ class nsqphp
     public function stop()
     {
         $this->running = false;
-        if (empty($this->subConnectionPool->count())) {
+        if (empty($this->subConnectionPool->count()) || !$this->runningNum) {
             $this->logger->warn('stop stop stop');
             $this->loop->stop();
         }
@@ -480,6 +484,11 @@ class nsqphp
      */
     public function readAndDispatchMessage($socket, $topic, $channel, $callback)
     {
+        $this->runningNum++;
+        $nsq = $this;
+        Defer::defer($e, function () use ($nsq) {
+            $nsq->runningNum--;
+        });
         $connection = $this->subConnectionPool->find($socket);
         $frame = $this->reader->readFrame($connection);
         $rdy = 1;
