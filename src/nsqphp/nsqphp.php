@@ -15,6 +15,7 @@ use nsqphp\RequeueStrategy\RequeueStrategyInterface;
 use nsqphp\Message\MessageInterface;
 use nsqphp\Message\Message;
 use mostka\Defer;
+use React\EventLoop\Timer\Timer;
 
 class nsqphp
 {
@@ -149,6 +150,9 @@ class nsqphp
      */
     private $lookupInterval;
 
+    private $boomTimerList;
+    private $boomCountdown;
+
     /**
      * Constructor
      *
@@ -193,6 +197,7 @@ class nsqphp
         $this->longId = $hn;
         $this->lookupInterval = 60;
         $this->running = true;
+        $this->boomCountdown = 35;  //nsq heartbeat interval is 30s
     }
 
     /**
@@ -462,10 +467,10 @@ class nsqphp
     /**
      * Stop subscribe event loop
      */
-    public function stop()
+    public function stop($force = false)
     {
         $this->running = false;
-        if (empty($this->subConnectionPool->count())) {
+        if (empty($this->subConnectionPool->count()) || $force) {
             $this->logger->warn('stop stop stop');
             $this->loop->stop();
         }
@@ -481,9 +486,25 @@ class nsqphp
      */
     public function readAndDispatchMessage($socket, $topic, $channel, $callback)
     {
+        $this->logger->debug('cancel boom timer');
+        $socketHash = (string)($socket);
+        if (isset($this->boomTimerList[$socketHash])) {
+            $this->loop->cancelTimer($this->boomTimerList[$socketHash]);
+            unset($this->boomTimerList[$socketHash]);
+        }
         $nsq = $this;
         $connection = $this->subConnectionPool->find($socket);
-        Defer::defer($e, function () use ($nsq, $socket, $connection) {
+        Defer::defer($e, function () use ($nsq, $socket, $socketHash, $connection) {
+            $this->logger->debug('add boom timer');
+            $nsq->boomTimerList[$socketHash] = $nsq->loop->addTimer($nsq->boomCountdown, function() use ($nsq, $socket, $connection) {
+                $nsq->logger->warn('boom boom boom');
+                $nsq->subConnectionPool->remove($socket);
+                $nsq->loop->removeReadStream($socket);
+                $connection->close();
+                if (empty($nsq->subConnectionPool->count())) {
+                    $nsq->loop->stop();
+                }
+            });
             if ( !$nsq->running) {
                 $nsq->subConnectionPool->remove($socket);
                 $nsq->loop->removeReadStream($socket);
