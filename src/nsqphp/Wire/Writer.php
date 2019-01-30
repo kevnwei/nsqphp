@@ -55,6 +55,22 @@ class Writer
         // $size = pack('N', strlen($data));
         // return $cmd . $size . $data;
     }
+
+    /**
+     * Leveled Defer Publish [LVDPUB]
+     *
+     * @param string $topic
+     * @param string $message
+     * @param int $level
+     *
+     * @return string
+     */
+    public function leveledDeferPublish($topic, $message, $level)
+    {
+        $cmd = $this->command('LVDPUB', $topic, $level);
+        $size = pack('N', strlen($message));
+        return $cmd . $size . $message;
+    }
     
     /**
      * Ready [RDY]

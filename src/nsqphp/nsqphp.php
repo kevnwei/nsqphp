@@ -294,13 +294,14 @@ class nsqphp
      *
      * @param string $topic A valid topic name: [.a-zA-Z0-9_-] and 1 < length < 32
      * @param MessageInterface $msg
+     * @param int $deferLevel 延时级别
      *
      * @throws Exception\PublishException If we don't get "OK" back from server
      *      (for the specified number of hosts - as directed by `publishTo`)
      *
      * @return nsqphp This instance for call chaining
      */
-    public function publish($topic, MessageInterface $msg)
+    public function publish($topic, MessageInterface $msg, $deferLevel = 0)
     {
         // pick a random
         $this->pubConnectionPool->shuffle();
@@ -310,8 +311,12 @@ class nsqphp
         foreach ($this->pubConnectionPool as $conn) {
             /** @var $conn ConnectionInterface */
             try {
-                $this->tryFunc(function (ConnectionInterface $conn) use ($topic, $msg, &$success, &$errors) {
-                    $conn->write($this->writer->publish($topic, $msg->getPayload()));
+                $this->tryFunc(function (ConnectionInterface $conn) use ($topic, $msg, &$success, &$errors, $deferLevel) {
+                    if ($deferLevel > 0) {
+                        $conn->write($this->writer->leveledDeferPublish($topic, $msg->getPayload(), $deferLevel));
+                    } else {
+                        $conn->write($this->writer->publish($topic, $msg->getPayload()));
+                    }
                     $frame = $this->reader->readFrame($conn);
                     while ($this->reader->frameIsHeartbeat($frame)) {
                         $conn->write($this->writer->nop());
